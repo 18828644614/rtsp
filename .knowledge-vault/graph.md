@@ -50,6 +50,17 @@ graph LR
     n0 --> n9
     n0 --> n10
     n0 --> n11
+    n2 --> n0
+    n2 --> n1
+    n2 --> n3
+    n2 --> n4
+    n2 --> n5
+    n2 --> n6
+    n2 --> n7
+    n2 --> n8
+    n2 --> n10
+    n2 --> n11
+    n2 --> n12
     classDef session fill:#f4f4f4,stroke:#666,color:#222
     classDef topic fill:#e7f3ff,stroke:#2774a8,color:#13293d
     classDef decision fill:#fff2cc,stroke:#a67c00,color:#3d3000
