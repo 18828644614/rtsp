@@ -1,6 +1,6 @@
 # Knowledge Graph
 
-Generated on 2026-10-16. Obsidian users can also use the native graph view.
+Generated on 2026-10-18. Obsidian users can also use the native graph view.
 
 ```mermaid
 graph LR
@@ -61,6 +61,19 @@ graph LR
     n2 --> n10
     n2 --> n11
     n2 --> n12
+    n3 --> n0
+    n3 --> n1
+    n3 --> n2
+    n3 --> n4
+    n3 --> n5
+    n3 --> n6
+    n3 --> n7
+    n3 --> n8
+    n3 --> n10
+    n3 --> n11
+    n3 --> n13
+    n3 --> n14
+    n3 --> n15
     classDef session fill:#f4f4f4,stroke:#666,color:#222
     classDef topic fill:#e7f3ff,stroke:#2774a8,color:#13293d
     classDef decision fill:#fff2cc,stroke:#a67c00,color:#3d3000
