@@ -29,12 +29,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "10-topics/03-RTSP协议.md",
+                "file": "10-topics/05-RTP协议.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "03-RTSP协议"
+              "title": "05-RTP协议"
             }
           }
         ],
@@ -207,9 +207,13 @@
   },
   "active": "392177a84219fe3a",
   "lastOpenFiles": [
+    "10-topics/04-SDP会话描述.md",
+    "10-topics/05-RTP协议.md",
+    "notes.md",
+    "task_plan.md",
+    "10-topics/03-RTSP协议.md",
     "10-topics/02-音视频基础.md",
     "10-topics/08-FFmpeg与解码.md",
-    "10-topics/03-RTSP协议.md",
     "90-archive",
     "40-snippets",
     "20-decisions",

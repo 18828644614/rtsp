@@ -1,6 +1,6 @@
 # Knowledge Graph
 
-Generated on 2026-10-18. Obsidian users can also use the native graph view.
+Generated on 2026-10-20. Obsidian users can also use the native graph view.
 
 ```mermaid
 graph LR
@@ -38,7 +38,9 @@ graph LR
     class n15 runbook
     n16["断线重连与故障排查"]
     class n16 runbook
-    n17["Project Knowledge Vault"]
+    n17["Notes: SDP 会话描述章节"]
+    n18["Project Knowledge Vault"]
+    n19["Task Plan: 完善 SDP 会话描述学习章节"]
     n0 --> n1
     n0 --> n2
     n0 --> n3
@@ -74,6 +76,30 @@ graph LR
     n3 --> n13
     n3 --> n14
     n3 --> n15
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
+    n4 --> n5
+    n4 --> n6
+    n4 --> n7
+    n4 --> n8
+    n4 --> n10
+    n4 --> n13
+    n4 --> n16
+    n7 --> n0
+    n7 --> n1
+    n7 --> n2
+    n7 --> n3
+    n7 --> n4
+    n7 --> n5
+    n7 --> n6
+    n7 --> n8
+    n7 --> n10
+    n7 --> n11
+    n7 --> n13
+    n7 --> n15
+    n7 --> n16
     classDef session fill:#f4f4f4,stroke:#666,color:#222
     classDef topic fill:#e7f3ff,stroke:#2774a8,color:#13293d
     classDef decision fill:#fff2cc,stroke:#a67c00,color:#3d3000
