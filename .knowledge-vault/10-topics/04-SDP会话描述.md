@@ -2,7 +2,7 @@
 type: topic
 status: active
 created: 2026-10-16
-updated: 2026-10-19
+updated: 2026-10-20
 tags:
   - sdp
   - rtsp
@@ -17,11 +17,13 @@ aliases:
 
 # SDP 会话描述
 
-> 适用对象：会 C++ 基础，但第一次学习 SDP、媒体轨道和 RTP 编码参数的读者。
+> 适用对象：第一次接触音视频网络协议的读者。不要求先懂 SDP、RTP、编解码器；C++ 也不熟时，先按第 1.5～1.6 节准备环境、认识语法，再做第 9 节的短程序。
 >
 > 学完后的实际产出：拿到一段 SDP，能列出音视频轨道、编码、RTP 时钟、编码参数和每条轨道的 SETUP URL；能在 Windows 或 Linux 上编译一个离线 C++17 解析程序。
 >
-> 阅读方式：先看第 0 节路线，再依次学习。第 9～11 节是可运行实验，第 14 节有参考答案。无需先准备摄像头，也无需先掌握 FFmpeg。
+> 阅读方式：先看第 0 节路线，再依次学习。第 9～11 节是可运行实验，第 14 节有参考答案。第一遍以 Windows 为主；Linux 命令供以后对照。无需先准备摄像头，也无需先掌握 FFmpeg。
+>
+> 示例定位：这是“读懂说明书并整理信息”的课程。完整示例是有限范围的教学解析器，不是通用 SDP 校验器。文末第 16 节记录实际执行的验证及其边界。
 
 ## 0. 学习规划：这一章到底学哪些东西
 
@@ -82,6 +84,36 @@ SETUP 所需信息 + RTP/解码初始化所需信息
 
 **进阶选修：** SDP 的组播、多个时间段、带宽属性、复杂编解码参数。SIP/WebRTC 中的 SDP offer/answer、ICE、DTLS、BUNDLE 属于另一套应用流程；先了解名字，不要把它们的所有规则套到 RTSP 拉流上。
 
+### 0.4 完全新手的第一轮安排
+
+先完成下面四个小目标，再追求完整播放器：
+
+| 次序 | 具体动作 | 完成后留下的证据 | 卡住时回哪里 |
+| --- | --- | --- | --- |
+| 第一次 | 读第 1～2 节，编译 `hello_sdp.cpp` | 终端显示 `hello SDP`，能指出 SDP 在 RTSP 的哪一部分 | 第 1.5 节 |
+| 第二次 | 读第 3～5 节，手工画媒体段并填写格式表 | 一张“轨道、PT、编码、时钟”表 | 第 3.3、5.7 节 |
+| 第三次 | 读第 6～7 节，手算参数和地址 | 一张 fmtp 用途表、五个 URL 计算结果 | 第 6.8、7.2 节 |
+| 第四次起 | 先跑逐行观察器，再跑完整解析器，再做故障实验 | 三个程序的输出、错误输入和退出码 | 第 9～11 节 |
+
+**每次只修改一个变量。** 例如先只改 PT，再只改时钟，再只改 control。一次改五处后出错，很难判断是哪一处导致的。每次学习结束，用自己的话写“我今天学到什么、输入是什么、输出是什么、还不明白什么”四句话。
+
+第 6 节可以分两遍：第一遍重点学 H.264 和 PCMU，知道其他编码去哪里查；第二遍再做 AAC、H.265、Opus 的参数练习。不会展开 SPS 的每一个二进制位，并不妨碍你继续学 SDP。
+
+### 0.5 最终要连起来的知识地图
+
+```text
+字节、文本、文件、URL
+  └─ RTSP DESCRIBE：拿到完整的说明书
+       └─ SDP：先分会话，再分媒体
+            ├─ m=：有哪些媒体，每条列出哪些 PT
+            ├─ rtpmap：PT 对应什么编码、时钟、声道
+            ├─ fmtp：怎样拆媒体载荷、怎样初始化解码器
+            └─ control：下一步向哪里发送控制请求
+                 └─ SETUP → PLAY → RTP → 解包 → 解码
+```
+
+可以把 SDP 想成快递的“货物清单”：清单告诉你箱子里是什么、该怎样处理；它本身不是货物，也不会替你把货物运过来。
+
 ## 1. 前置知识：这些词先用日常语言解释
 
 ### 1.1 你已有的 C++ 基础如何派上用场
@@ -135,6 +167,85 @@ SETUP 所需信息 + RTP/解码初始化所需信息
 - [ ] 我能看懂 C++ 的字符串、循环、vector 和 map。
 
 小练习：一台摄像头提供“无声主码流”和“带声音子码流”。它们是否一定出现在同一份 SDP 中？先思考，答案见第 14 节第 1 题。
+
+### 1.5 Windows 从零准备：先让一个 C++ 程序跑起来
+
+**前置：**能打开文件夹、保存纯文本文件即可。第一个实验不需要网络连接、FFmpeg、摄像头或管理员权限。
+
+程序经历三个步骤：写 `.cpp` 源文件 → 编译器把源码变成 `.exe` → 运行 `.exe`。Markdown 里的代码围栏（那三根反引号）不属于源码，复制时不要一起复制。
+
+选择一种工具链即可：
+
+| 方案 | 安装或准备 | 运行命令的位置 |
+| --- | --- | --- |
+| Visual Studio 2022 / Build Tools | 在安装器中选择“使用 C++ 的桌面开发”，包含 MSVC 和 Windows SDK | 开始菜单打开“Developer PowerShell for VS 2022” |
+| MinGW-w64 / MSYS2 | 准备 Windows 原生的 `g++`；MSYS2 可在 UCRT64 终端用 `pacman -S --needed mingw-w64-ucrt-x86_64-gcc` 安装 | 普通 PowerShell；确保对应 `bin` 已加入 PATH，例如 `C:\msys64\ucrt64\bin` |
+
+已经有可用编译器就直接用，不必为了本章更换。MSVC 用 `cl`，MinGW 用 `g++`，下面两组命令选择一组执行。
+
+打开 PowerShell，建立专门的实验目录：
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\sdp-lab" | Out-Null
+Set-Location -LiteralPath "$env:USERPROFILE\sdp-lab"
+Get-Location
+```
+
+这里 `$env:USERPROFILE` 是你的 Windows 用户目录，`Set-Location` 表示切换工作目录。后面的相对文件名都相对于这个目录。文中的工作目录是实验目录，不是知识库目录。
+
+用编辑器新建 `hello_sdp.cpp`，保存为 UTF-8 纯文本。文件资源管理器开启“查看 → 显示 → 文件扩展名”，确认不是 `hello_sdp.cpp.txt`。内容：
+
+```cpp
+#include <iostream>
+
+int main() {
+    std::cout << "hello SDP\n";
+    return 0;
+}
+```
+
+MinGW 编译与运行：
+
+```powershell
+g++ --version
+g++ -std=c++17 -Wall -Wextra -pedantic hello_sdp.cpp -o hello_sdp.exe
+.\hello_sdp.exe
+$LASTEXITCODE
+```
+
+MSVC 编译与运行，在 Developer PowerShell 中执行：
+
+```powershell
+cl /nologo /std:c++17 /EHsc /W4 /utf-8 hello_sdp.cpp /Fe:hello_sdp.exe
+.\hello_sdp.exe
+$LASTEXITCODE
+```
+
+预期先看到 `hello SDP`，然后看到退出码 `0`。退出码是程序告诉外部“结果如何”的整数；本章约定 0=成功、1=输入或解析错误、2=命令用法错误。只有编译成功后再运行，避免误运行上一次留下的旧 `.exe`。
+
+常见障碍：`g++`/`cl` 无法识别通常是工具链或终端问题；`No such file or directory` 先用 `Get-ChildItem` 检查当前目录和扩展名；运行当前目录程序要写 `.\hello_sdp.exe`。不需要通过更改 PowerShell 脚本执行策略来运行这个普通 EXE。
+
+**通过标准：**你能关闭终端、重新打开、切回实验目录，再独立完成编译和运行。
+
+### 1.6 看后面的 C++，至少先认识这些写法
+
+| 写法 | 把它读成一句话 |
+| --- | --- |
+| `#include <string>` | 使用标准库提供的字符串工具 |
+| `std::string line` | 准备一个变量，保存一行文字 |
+| `std::getline(input, line)` | 从输入中读到下一个换行，把本行放进 line |
+| `line[0]` | 取第一个字符；必须先确认字符串不为空 |
+| `line.substr(2)` | 从下标 2，也就是第三个字符开始，取后面的文字 |
+| `line.find(':')` | 查找第一个冒号；找不到返回 `std::string::npos` |
+| `std::vector<Media>` | 可增减长度的媒体列表 |
+| `std::map<int, Format>` | 用整数 PT 查找一条 Format 记录 |
+| `Media& m` / `Media* p` | 引用一条已有记录 / 保存记录所在位置的指针 |
+| `nullptr` | 指针目前没有指向任何记录 |
+| `throw` / `catch` | 发现不能继续的错误 / 在外层统一处理它 |
+
+`char` 是单个字符，如 `'m'`；`std::string` 是一串字符，如 `"video"`。C++ 字符串 `"\r\n"` 表示两个控制字符，不是四个可见字母。ASCII 字母通常占一个字节；UTF-8 中文常占多个字节。
+
+暂时看不懂引用和指针时，先做第 9.2 节，它只需要字符串、循环和整数。回头再看第 10.3 节如何跟踪“当前媒体段”。
 
 ## 2. SDP 的作用：它是一张媒体说明书
 
@@ -562,6 +673,35 @@ a=fmtp:96 packetization-mode=1;profile-level-id=42e01f;sprop-parameter-sets=Z0Lg
 - [ ] 我会保留 fmtp 原文，不会破坏 Base64 尾部的等号。
 - [ ] 我能区别语法错误、缺少映射和不支持编码。
 
+### 5.7 从三行文字到一条记录：手工走一遍
+
+**前置：**第 3.3 节的作用域。先不要写代码，在纸上做下面的操作。
+
+```sdp
+m=video 0 RTP/AVP 96 98
+a=rtpmap:98 H265/90000
+a=rtpmap:96 H264/90000
+a=fmtp:96 packetization-mode=1
+a=control:trackID=0
+```
+
+1. 遇到 `m=`，新建一条 video 记录，为 96、98 各留一个格式位置。
+2. 读到 `rtpmap:98`，找到本媒体的 98 位置，填上 H265、90000。
+3. 读到 `rtpmap:96`，填本媒体的 96；不能因为它后出现就覆盖 98。
+4. 读到 `fmtp:96`，只给 96 填参数，98 的参数仍未知。
+5. `control` 属于整条媒体，不是“只属于前一行 PT=96”。
+
+结果应为：
+
+| 媒体 | PT | 编码 | 时钟 | fmtp | 本媒体 control |
+| --- | --- | --- | --- | --- | --- |
+| video[0] | 96 | H264 | 90000 | packetization-mode=1 | trackID=0 |
+| video[0] | 98 | H265 | 90000 | 未提供 | trackID=0 |
+
+这个片段只有一个 `m=`，因此是一条媒体、两个格式。它是局部讲解片段，缺少会话头，不能独立作为完整 SDP 文件运行。
+
+**检验理解：**如果下一行是 `m=audio 0 RTP/AVP 96`，必须新建 audio[1] 和它自己的 96；后续 `rtpmap` 不再填写 video[0]。这就是程序要保存 `current` 的原因。
+
 ## 6. 常见编码：看到名字后还要看哪些参数
 
 这一节的目标是建立“能判断下一步查什么”的地图。编码细节和 RTP 分片请继续读 [[07-H264与RTP封装]]。
@@ -578,6 +718,7 @@ a=fmtp:96 packetization-mode=1;profile-level-id=42e01f;sprop-parameter-sets=Z0Lg
 
 - `H264` 是视频编码名称；`90000` 是 RTP 时钟。
 - `packetization-mode=1` 常表示允许通过 FU-A 把一个较大的 NAL 单元拆成多个 RTP 包。具体重组见 [[07-H264与RTP封装]]。
+- `packetization-mode` 缺省为 0，模式 0 只允许单 NAL 包；模式 1 还允许 STAP-A 聚合与 FU-A 分片。模式 2 是另一套交织模式，入门接收器应明确拒绝不支持的模式，不能把缺省值猜成 1。
 - `profile-level-id` 用十六进制表示 profile、约束标志和 level；它不是分辨率字符串。
 - `sprop-parameter-sets` 通常是用逗号分隔的 Base64 SPS、PPS。它们是解码初始化所需的参数集，不能丢掉尾部 `=`。
 - 有的设备通过 `sprop-parameter-sets` 提供参数，有的把 SPS/PPS 发送在 RTP 里，有的两者都做。客户端应按实际载荷处理。
@@ -592,7 +733,9 @@ a=rtpmap:98 H265/90000
 a=fmtp:98 sprop-vps=QAEMAf//AWAAAAMAkAAAAwAAAwBDoA;sprop-sps=QgEBAWAAAAMAkAAAAwAAAwBDoA==;sprop-pps=RAHBcrA=
 ```
 
-也可能写成 `HEVC`，要结合设备和 RFC 7798 处理。H.265 通常需要 VPS、SPS、PPS；它们的 Base64 参数仍应原样保留。H.264 和 H.265 都是“视频”，但 NAL 类型、分片规则和解码器并不相同，不能只因字符串前缀相似就复用全部代码。
+RFC 7798 的标准编码名称是 `H265`。个别设备可能使用 `HEVC` 别名；这属于需要明确验证的厂商兼容处理，不能当作标准名称直接假定互通。H.265 通常需要 VPS、SPS、PPS；它们的 Base64 参数仍应原样保留。H.264 和 H.265 都是“视频”，但 NAL 类型、分片规则和解码器并不相同，不能只因字符串前缀相似就复用全部代码。
+
+这里的 Base64 字符串用于展示字段位置，不保证与某条真实码流相匹配；不能复制后期待任意 H.265 画面都能解码。
 
 ### 6.3 AAC / MPEG-4 generic
 
@@ -624,7 +767,7 @@ a=rtpmap:8 PCMA/8000
 
 - PCMU 常对应 G.711 μ-law，PCMA 常对应 G.711 A-law。
 - RTP 时钟为 8000 Hz；一声道是常见默认。
-- 静态 PT 0/8 在 RTP/AVP 中有标准约定，但设备仍可能附带 `rtpmap`，以实际描述为准。
+- 静态 PT 0/8 在 RTP/AVP 中有标准约定，设备可以附带一致的 `rtpmap`。如果它把 PT 0 声明成 H.264 或 PCMU/16000，属于冲突，不能让错误描述覆盖静态约定；其他采样率应使用适合的动态映射。
 - G.711 通常不需要像 H.264 那样的 SPS/PPS；但采样率、声道和每包时长仍影响解码。
 
 ### 6.5 Opus
@@ -638,7 +781,7 @@ a=fmtp:111 minptime=10;useinbandfec=1
 ```
 
 - Opus 在 RTP 中使用 48000 Hz 时钟。
-- `/2` 是声道数的默认表达；它不是“内部只能双声道”的全部能力说明。
+- RFC 7587 要求 Opus 的这条 SDP 映射写成 `opus/48000/2`：48000 和 2 是规定值，不是可随意省略的默认写法。它不表示每个实际音频包一定是立体声，实际编码仍可为单声道。
 - `minptime`、`useinbandfec` 等是格式参数；是否启用 FEC、怎样解码要交给 Opus 实现。
 - PT 111 是动态值，不是 Opus 永久固定的号码；另一台设备可以选择别的动态 PT。
 
@@ -658,6 +801,44 @@ a=fmtp:111 minptime=10;useinbandfec=1
 - [ ] 我知道 H.265 常见 VPS/SPS/PPS。
 - [ ] 我不会把动态 PT 当作编码的永久编号。
 - [ ] 我能解释为什么 `H264/90000` 不能直接给出帧率。
+
+### 6.8 参数到底交给谁：从文字配置到媒体处理
+
+**前置：**第 5.4 节的 fmtp。先把“还原文本”和“解码画面”分成两个动作。
+
+| 参数 | 通俗解释 | 谁使用它 | SDP 解析器这一层做什么 |
+| --- | --- | --- | --- |
+| H.264 `packetization-mode` | 大块压缩数据允许怎样装进包 | RTP 解包器 | 保留并读取模式，检查自己是否支持 |
+| H.264 `sprop-parameter-sets` | 还原图像前的格式说明 | 参数处理模块、解码器 | 按逗号分项，再 Base64 解码成二进制 NAL |
+| H.264 `profile-level-id` | 编码工具及能力等级的标识 | 能力检查模块 | 保留十六进制文本，按规范解释，不能当宽高 |
+| AAC `SizeLength` 等 | AAC 小单元的长度字段占几位 | AAC RTP 解包器 | 记录规则，之后才能正确拆载荷 |
+| AAC `config` | AAC 编码配置 | AAC 解码器 | 把十六进制还原成配置字节 |
+
+**Base64 是一种把二进制写成可打印文字的办法，不是视频编码，也不是加密。** 它常用字母、数字、`+`、`/`，末尾可能有 `=` 填充。十六进制是另一种表示法，每两个十六进制字符表示一个字节，`1190` 对应 `11 90` 两字节。
+
+在 PowerShell 中做一个很小的 Base64 实验：
+
+```powershell
+$parameterBytes = [Convert]::FromBase64String('aM4xUg==')
+[BitConverter]::ToString($parameterBytes)
+```
+
+预期 `68-CE-31-52`。这一步只证明四个字节恢复出来了，不能证明它们与当前码流匹配，更没有解码画面。
+
+H.264 通常有如下处理路线：
+
+```text
+sprop-parameter-sets 原文
+  → 按逗号分开 → 分别做 Base64 解码 → 获得 SPS/PPS NAL 字节
+  → 按解码器要求组装配置或输入数据
+RTP 载荷 → 根据 packetization-mode 解包 → 获得图像 NAL → 解码
+```
+
+SPS 是“序列参数集”，PPS 是“图像参数集”，可以先理解为两类格式说明；NAL 是压缩码流的一种数据单元。Base64 解码得到的 NAL 不会自动带上 Annex B 起始码；是否需要加 `00 00 00 01`，取决于下一层要的格式，见 [[07-H264与RTP封装]]。不能把 Base64 字符串的 ASCII 字节直接交给解码器。
+
+选学手算：对于本章 AAC-LC 的简单配置 `1190`，二进制可分为 `00010 | 0011 | 0010 | 000`。前 5 位为对象类型 2（AAC-LC），接下来 4 位的索引 3 表示 48000 Hz，再接下来 4 位的通道配置 2 表示双声道；剩余位属于后续配置。本例和 `MPEG4-GENERIC/48000/2` 一致。**这只是该简单配置的读法**，带扩展对象类型、显式频率或 SBR 的配置需要完整规则，不能把所有 AAC 都固定按这 16 位解析。
+
+练习：`config=1190` 应用 Base64 还是十六进制转换？`sprop-parameter-sets=...` 呢？答案：前者十六进制，后者按逗号拆分后分别 Base64；先看参数定义，再选择转换方式。
 
 ## 7. `a=control` 与 URL：从 SDP 生成 SETUP 地址
 
@@ -693,12 +874,14 @@ a=control:trackID=1
 | 基准 | SDP 属性 | 结果 |
 | --- | --- | --- |
 | `rtsp://cam/live/` | `trackID=0` | `rtsp://cam/live/trackID=0` |
-| `rtsp://cam/live` | `trackID=0` | 简化实现要先规范化为目录，避免得到 `rtsp://cam/trackID=0` |
+| `rtsp://cam/live` | `trackID=0` | `rtsp://cam/trackID=0`；没有尾斜杠，替换基准路径末段 `live` |
 | `rtsp://cam/live/` | `rtsp://other/x` | `rtsp://other/x` |
 | `rtsp://cam/live/` | `*`（会话级） | 继承完整基准 URL |
 | `rtsp://cam/live/` | `/trackID=0` | 按 URI 解析规则从主机根路径开始，结果为 `rtsp://cam/trackID=0` |
 
-最后一行体现相对 URL 和“以 `/` 开始的路径”的区别。生产代码应使用经过测试的 URI 解析器；本章的示例只覆盖 RTSP 设备最常见的三类写法，并把不支持情况报出来。
+**尾部 `/` 有实际语义。** 你可以把 `rtsp://cam/live/` 看作目录，而 `rtsp://cam/live` 的最后一段会在普通相对引用解析时被替换。不要为了得到“看起来想要的路径”而自行给服务器的基准地址加 `/`。
+
+最后一行体现普通相对路径和“以 `/` 开始的路径”的区别。本章代码支持这几种简单写法；包含 `..`、查询串、片段、带凭据的地址等复杂情况会明确报错。完整客户端应接入经过测试的 URI 解析库，并按 RTSP 版本处理地址规则。若 `Content-Location` 自身为相对引用，还需要先相对请求 URL 求出绝对基准，不能把它原样交给要求绝对 URL 的函数。
 
 ### 7.3 一个常见的错误示例
 
@@ -716,9 +899,11 @@ a=control:trackID=0
 rtsp://cam/live/maintrackID=0
 ```
 
-也可能把 `Content-Base` 当文件名，错误地得到 `rtsp://cam/live/trackID=0`。真正答案取决于 URI 的基准路径规则和服务器的约定，不能只凭肉眼拼接。
+按规范的普通相对引用规则，结果应为 `rtsp://cam/live/trackID=0`：替换末段 `main`。若服务器期望 `rtsp://cam/live/main/trackID=0`，它应该提供以 `/` 结尾的目录基准，或直接提供绝对 control 地址。实际确有设备要求额外追加路径；应在规范结果失败并有抓包或设备资料依据后，加入明确、可关闭的厂商兼容策略，不能把兼容拼接当作通用规则。
 
-建议程序保留三个值，便于排错：
+再手算两例：基准 `rtsp://cam:8554/area/live/` 配 `/trackID=2` 得 `rtsp://cam:8554/trackID=2`；配 `trackID=2` 则得 `rtsp://cam:8554/area/live/trackID=2`。主机和端口不变，变化的是路径。
+
+建议程序保留四个值，便于排错：
 
 ```text
 request_url       = DESCRIBE 发出的 URL
@@ -788,7 +973,7 @@ struct SessionDescription {
 ```text
 开始
   ↓
-验证每行恰好有一个合法的字段字母和 '='
+验证每行以一个合法的字段字母和 '=' 开头，后面的值可以继续含 '='
   ↓
 v/o/s/t 等会话字段
   ↓ 遇到 m=
@@ -836,14 +1021,16 @@ line 12: rtpmap payload type 97 is not listed by the current m= section
 
 ## 9. 实验材料：准备一个不依赖摄像头的 SDP 文件
 
-在工作目录新建 `sample.sdp`，内容如下。保存时可以用 UTF-8；协议字段本身使用 ASCII。
+### 9.1 准备贯穿全章的样例
+
+在第 1.5 节的实验目录新建 `sample.sdp`，内容如下。保存为 **UTF-8 无 BOM**（BOM 是有些编辑器放在文件开头的编码标记）；协议字段本身使用 ASCII。这里已经把行内说明全部放在代码块外面，可以只复制代码块内容。
 
 ```sdp
 v=0
 o=- 1001 3 IN IP4 192.0.2.10
 s=Beginner Camera
 c=IN IP4 0.0.0.0
-t=0 0  
+t=0 0
 a=control:*
 a=sendonly
 
@@ -860,10 +1047,81 @@ a=control:trackID=1
 
 说明：
 
-- 空行只是为了阅读；解析器不能把空行误当成新媒体。
-- `t=0 0  ` 的尾部空格用于练习 trim。
+- 空行只是为了阅读；本章离线解析器容忍它们，不能把它们误当成新媒体。正式生成 SDP 时应去掉这些空行，按规范行顺序用 CRLF 输出。
+- `sample.sdp` 是纯 SDP，不要把第 2.2 节的 RTSP 头一起保存进去。
 - `192.0.2.10` 是文档保留地址，不会指向真实摄像头。
 - 这份文件描述了能力和控制地址，不包含任何真实媒体包。
+
+### 9.2 实验一：先写“逐行观察器”
+
+**目标：**先看清文件怎样变成字段和媒体段，再读完整解析器。本程序只是观察器，不判断一份 SDP 是否符合全部规则。
+
+新建 `sdp_lines.cpp`：
+
+```cpp
+#include <fstream>
+#include <iostream>
+#include <string>
+
+int main(int argc, char** argv) {
+    if (argc != 2) {
+        std::cerr << "Usage: sdp_lines.exe sample.sdp\n";
+        return 2;
+    }
+    std::ifstream input(argv[1], std::ios::binary);
+    if (!input) {
+        std::cerr << "cannot open input file\n";
+        return 1;
+    }
+    int line_number = 0;
+    int media_index = -1;
+    std::string line;
+    while (std::getline(input, line)) {
+        ++line_number;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.empty()) continue;
+        if (line.size() < 2 || line[1] != '=') {
+            std::cerr << "line " << line_number << ": expected x=value\n";
+            return 1;
+        }
+        const char type = line[0];
+        const std::string value = line.substr(2);
+        if (type == 'm') ++media_index;
+        std::cout << "line " << line_number << " ";
+        if (media_index < 0) std::cout << "session";
+        else std::cout << "media[" << media_index << "]";
+        std::cout << " type=" << type << " value=" << value << '\n';
+    }
+    return 0;
+}
+```
+
+MinGW，在实验目录执行：
+
+```powershell
+g++ -std=c++17 -Wall -Wextra -pedantic sdp_lines.cpp -o sdp_lines.exe
+.\sdp_lines.exe .\sample.sdp
+$LASTEXITCODE
+```
+
+MSVC 替代编译命令：`cl /nologo /std:c++17 /EHsc /W4 /utf-8 sdp_lines.cpp /Fe:sdp_lines.exe`，运行命令相同。
+
+应看到类似行（省略中间行）：
+
+```text
+line 1 session type=v value=0
+line 6 session type=a value=control:*
+line 9 media[0] type=m value=video 0 RTP/AVP 96
+line 12 media[0] type=a value=control:trackID=0
+line 14 media[1] type=m value=audio 0 RTP/AVP 97
+line 17 media[1] type=a value=control:trackID=1
+```
+
+逐步解释：`argv[1]` 是命令行里给出的文件名；二进制读取让程序自己处理换行；`getline` 去掉 `\n`，我们再去掉剩余的 `\r`；下标从 0 开始，`substr(2)` 跳过前两个字符 `a=`；`media_index=-1` 表示尚未遇到任何媒体；每次 `m=` 加一，而不是每次 `a=` 加一。
+
+**动手修改：**复制为 `only_video.sdp`，删除从 `m=audio` 开始到文件末尾的所有行，再运行观察器。应该只有 session 和 media[0]，没有 media[1]。接着把视频 `a=control` 移到第一个 `m=` 前面，观察它的归属如何改变；这不是合法控制配置的修复方式，只是作用域实验。
+
+**阶段 F 入门检查：**能说明行号为什么跳过了空行所在的位置、为什么第一条媒体编号是 0、为什么 `a=fmtp` 里额外的等号没有丢失。
 
 ## 10. C++17 示例：读取、解析、打印和生成 SETUP URL
 
@@ -875,12 +1133,15 @@ a=control:trackID=1
 - 识别会话名、会话 control、每条 `m=`、PT、`rtpmap`、`fmtp`、媒体 control。
 - 对常见相对/绝对 control URL 生成示例 SETUP 地址。
 - 用行号报告格式和关联错误。
+- 拒绝缺少 rtpmap 的动态 PT，补齐常用静态音频 PT 0/8，并核对它们的显式映射。
 
 它不会：
 
 - 连接 RTSP 服务或读取 DESCRIBE 的 TCP 消息体。
 - 解析所有 RFC 字段、所有 URI 语法、所有 codec 专属 fmtp。
 - 接收 RTP、重组 NAL 或解码画面。
+
+**支持范围：**本章实验只处理 `RTP/AVP`、单个端口、数字 PT、普通控制路径；它检查必要字段存在，但没有完整校验所有字段顺序、`o/t/c` 的内部语法、连接信息继承、方向属性或全部编码参数。合法但超出示例范围的输入可以被拒绝；解析成功也不代表通过了通用 SDP 标准校验。第 8.1 节是未来模块的数据设计草图，下面的 `Description/Media/Format` 才是本程序实际使用的结构，不要把两块代码一起粘贴。
 
 将以下内容保存为 `sdp_inspect.cpp`：
 
@@ -893,6 +1154,7 @@ a=control:trackID=1
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 struct Format {
@@ -910,6 +1172,8 @@ struct Media {
     std::vector<int> pts;
     std::string control;
     std::map<int, Format> formats;
+    std::map<int, int> pt_lines;
+    std::vector<std::string> unknown_attributes;
 };
 
 struct Description {
@@ -917,6 +1181,7 @@ struct Description {
     std::string session_control;
     std::vector<Media> media;
     std::vector<std::string> warnings;
+    std::vector<std::string> unknown_attributes;
 };
 
 static std::string trim(std::string s) {
@@ -935,6 +1200,8 @@ static std::vector<std::string> words(const std::string& s) {
 
 static int to_int(const std::string& s, const std::string& what, int line) {
     try {
+        if (s.empty() || s.find_first_not_of("0123456789") != std::string::npos)
+            throw std::invalid_argument("expected decimal digits");
         size_t used = 0;
         int value = std::stoi(s, &used);
         if (used != s.size()) throw std::invalid_argument("trailing text");
@@ -965,15 +1232,22 @@ static void parse_rtpmap(Media& m, const std::string& value, int line) {
     std::vector<std::string> fields;
     std::stringstream ss(parts[0]);
     for (std::string item; std::getline(ss, item, '/');) fields.push_back(item);
-    if (fields.size() < 2 || fields.size() > 3)
+    if (fields.size() < 2 || fields.size() > 3 ||
+        fields[0].empty() || parts[0].back() == '/')
         throw std::runtime_error("line " + std::to_string(line) +
                                  ": rtpmap must be name/clock[/parameter]");
     Format& f = m.formats[pt];
+    if (!f.encoding.empty())
+        throw std::runtime_error("line " + std::to_string(line) + ": duplicate rtpmap");
     f.pt = pt;
     f.encoding = fields[0];
     f.clock = to_int(fields[1], "RTP clock", line);
     if (fields.size() == 3)
         f.channels = to_int(fields[2], "channels", line);
+    else if (m.kind == "audio") f.channels = 1;
+    if (f.clock <= 0 || (m.kind == "audio" && f.channels <= 0) ||
+        (fields.size() == 3 && f.channels <= 0))
+        throw std::runtime_error("line " + std::to_string(line) + ": clock/channels must be positive");
 }
 
 static void parse_fmtp(Media& m, const std::string& value, int line) {
@@ -989,6 +1263,8 @@ static void parse_fmtp(Media& m, const std::string& value, int line) {
     // codec-specific; splitting here would silently destroy information.
     m.formats[pt].pt = pt;
     m.formats[pt].fmtp = trim(value.substr(sp + 1));
+    if (m.formats[pt].fmtp.empty())
+        throw std::runtime_error("line " + std::to_string(line) + ": empty fmtp parameters");
 }
 
 static void parse_attribute(Description& d, Media* current,
@@ -997,6 +1273,11 @@ static void parse_attribute(Description& d, Media* current,
     const std::string name = colon == std::string::npos ? text : text.substr(0, colon);
     const std::string value = colon == std::string::npos ? "" : text.substr(colon + 1);
     if (name == "control") {
+        if (value.empty() || (current && value == "*"))
+            throw std::runtime_error("line " + std::to_string(line) + ": invalid control");
+        if ((current && !current->control.empty()) ||
+            (!current && !d.session_control.empty()))
+            throw std::runtime_error("line " + std::to_string(line) + ": duplicate control");
         if (current) current->control = value;
         else d.session_control = value;
     } else if (name == "rtpmap") {
@@ -1009,6 +1290,8 @@ static void parse_attribute(Description& d, Media* current,
                name == "sendrecv" || name == "inactive") {
         // Direction is useful to inspect, but this small example does not store it.
     } else {
+        if (current) current->unknown_attributes.push_back(text);
+        else d.unknown_attributes.push_back(text);
         d.warnings.push_back("line " + std::to_string(line) +
                              ": ignored attribute a=" + text);
     }
@@ -1024,13 +1307,14 @@ static Description parse_sdp(const std::string& source) {
     while (std::getline(input, raw)) {
         ++line;
         if (!raw.empty() && raw.back() == '\r') raw.pop_back();
-        raw = trim(raw);
         if (raw.empty()) continue;
         if (raw.size() < 2 || raw[1] != '=' ||
-            !std::islower(static_cast<unsigned char>(raw[0])))
+            raw[0] < 'a' || raw[0] > 'z')
             throw std::runtime_error("line " + std::to_string(line) + ": expected x=value");
         const char type = raw[0];
         const std::string value = raw.substr(2);
+        if (value.empty())
+            throw std::runtime_error("line " + std::to_string(line) + ": empty field value");
         if (type == 'v') {
             if (value != "0") throw std::runtime_error("line " + std::to_string(line) + ": only v=0 is supported");
             saw_v = true;
@@ -1044,17 +1328,26 @@ static Description parse_sdp(const std::string& source) {
             media.kind = p[0];
             media.port = to_int(p[1], "media port", line);
             media.proto = p[2];
+            if (media.port > 65535)
+                throw std::runtime_error("line " + std::to_string(line) + ": port outside 0..65535");
+            if (media.proto != "RTP/AVP")
+                throw std::runtime_error("line " + std::to_string(line) + ": lab supports RTP/AVP only");
             for (size_t i = 3; i < p.size(); ++i) {
                 const int pt = to_int(p[i], "payload type", line);
                 if (pt < 0 || pt > 127) throw std::runtime_error("line " + std::to_string(line) + ": PT outside 0..127");
+                if (has_pt(media, pt))
+                    throw std::runtime_error("line " + std::to_string(line) + ": duplicate PT in m=");
                 media.pts.push_back(pt);
                 media.formats[pt].pt = pt;
+                media.pt_lines[pt] = line;
             }
             d.media.push_back(std::move(media));
             current = &d.media.back();
         } else if (type == 'a') parse_attribute(d, current, value, line);
-        else if (type == 'c' || type == 'b' || type == 'i') {
-            // Recognized enough for this lab; keep only core fields above.
+        else if (std::string("iuepcbrzk").find(type) != std::string::npos) {
+            // Known SDP field types, but not interpreted by this limited lab.
+            d.warnings.push_back("line " + std::to_string(line) +
+                                 ": field not interpreted: " + std::string(1, type));
         } else {
             throw std::runtime_error("line " + std::to_string(line) + ": unsupported top-level field: " + std::string(1, type));
         }
@@ -1062,20 +1355,63 @@ static Description parse_sdp(const std::string& source) {
     if (!saw_v || !saw_o || !saw_s || !saw_t)
         throw std::runtime_error("SDP must contain v=, o=, s= and t=");
     if (d.media.empty()) throw std::runtime_error("SDP must contain at least one m=");
+    for (auto& m : d.media) {
+        for (int pt : m.pts) {
+            auto& f = m.formats.at(pt);
+            const std::string where = "line " + std::to_string(m.pt_lines.at(pt));
+            if (pt == 0 || pt == 8) {
+                const std::string codec = pt == 0 ? "PCMU" : "PCMA";
+                std::string actual = f.encoding;
+                for (char& c : actual)
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                if (m.kind != "audio" || (!actual.empty() &&
+                    (actual != codec || f.clock != 8000 || f.channels != 1)))
+                    throw std::runtime_error(where + ": conflicting static PT 0/8 mapping");
+                f.encoding = codec; f.clock = 8000; f.channels = 1;
+            } else if (f.encoding.empty()) {
+                if (pt >= 96)
+                    throw std::runtime_error(where + ": dynamic PT " + std::to_string(pt) + " needs rtpmap");
+                d.warnings.push_back(where + ": static/reserved PT not implemented by lab: " + std::to_string(pt));
+            }
+        }
+    }
     return d;
 }
 
 static std::string join_url(const std::string& base, const std::string& control) {
     if (control.empty()) throw std::runtime_error("empty a=control");
-    if (control == "*") return base;
-    if (control.find("rtsp://") == 0 || control.find("rtsps://") == 0) return control;
-    if (base.empty()) throw std::runtime_error("relative control has no base URL");
-    const auto scheme = base.find("://");
-    const auto slash = base.find('/', scheme == std::string::npos ? 0 : scheme + 3);
-    const std::string root = slash == std::string::npos ? base : base.substr(0, slash);
-    if (!control.empty() && control[0] == '/') return root + control;
-    if (base.back() == '/') return base + control;
-    return base + "/" + control; // common RTSP Content-Base behavior
+    // Deliberately limited URI subset: fail instead of guessing complex URLs.
+    auto origin = [](const std::string& url) {
+        const size_t start = url.rfind("rtsp://", 0) == 0 ? 7 :
+                             (url.rfind("rtsps://", 0) == 0 ? 8 : 0);
+        if (!start || url.find_first_of("?#@\\ \t\r\n") != std::string::npos)
+            throw std::runtime_error("URL outside lab subset (queries/credentials/whitespace unsupported)");
+        const auto slash = url.find('/', start);
+        const auto end = slash == std::string::npos ? url.size() : slash;
+        if (end == start) throw std::runtime_error("URL has no host");
+        std::istringstream path(slash == std::string::npos ? "" : url.substr(slash));
+        for (std::string part; std::getline(path, part, '/');)
+            if (part == "." || part == "..")
+                throw std::runtime_error("dot segments outside lab URL subset");
+        return url.substr(0, end);
+    };
+    if (control.rfind("rtsp://", 0) == 0 || control.rfind("rtsps://", 0) == 0) {
+        origin(control);
+        return control;
+    }
+    const std::string root = origin(base);
+    if (control == "*") return base; // session-level special case only
+    if (control.rfind("//", 0) == 0 ||
+        control.find_first_of("?#:\\ \t\r\n") != std::string::npos)
+        throw std::runtime_error("control URL outside lab subset: " + control);
+    std::istringstream path(control);
+    for (std::string part; std::getline(path, part, '/');)
+        if (part == "." || part == "..")
+            throw std::runtime_error("dot segments outside lab URL subset");
+    if (control[0] == '/') return root + control;
+    const std::string directory = base.size() == root.size() ? root + "/" :
+                                 base.substr(0, base.rfind('/') + 1);
+    return directory + control;
 }
 
 int main(int argc, char** argv) {
@@ -1098,7 +1434,7 @@ int main(int argc, char** argv) {
             std::cout << "\n  SETUP: " << (m.control.empty() ? "<missing>" : join_url(base, m.control)) << "\n";
             for (int pt : m.pts) {
                 const auto& f = m.formats.at(pt);
-                std::cout << "  PT " << pt << ": " << (f.encoding.empty() ? "<static/default>" : f.encoding)
+                std::cout << "  PT " << pt << ": " << (f.encoding.empty() ? "<unresolved>" : f.encoding)
                           << " clock=" << f.clock << " channels=" << f.channels << "\n";
                 if (!f.fmtp.empty()) std::cout << "    fmtp=" << f.fmtp << "\n";
             }
@@ -1117,8 +1453,53 @@ int main(int argc, char** argv) {
 - `Format` 用 PT 做键，因此 `fmtp:96` 会挂到当前媒体的 96，而不是覆盖音频的 96。
 - `parse_rtpmap` 先确认 PT 出现在 `m=`，再读取编码和时钟。
 - `parse_fmtp` 故意只截出 PT 后保留剩余原文；这是为了不破坏 codec 专属语法。
-- `join_url` 是**教学用常见规则**，不是完整 RFC URI 库；真实项目应补齐规范化、查询字符串和异常 URL 测试。
+- `join_url` 在有限子集中遵循路径合并规则；无尾斜杠时替换末段。它会拒绝查询串、点路径等未实现情况，真实项目使用完整 URI 库。
 - 未知的 `a=` 作为 warning；未知顶层字段作为错误，体现第 3.4 节的区别。
+- `for (auto& m : d.media)` 是所有行读完后的检查：这时才检查动态 PT 是否缺映射，避免仅因 fmtp 先于 rtpmap 到达就过早判错。静态 PT 表只实现 0/8；其他静态或保留值会显示 `<unresolved>` 并警告，不会假装已经知道格式。
+
+### 10.3 不要一次读完：跟踪六次状态变化
+
+**前置：**已经跑过第 9.2 节。阅读时先找到 `main`，它是程序入口；其他函数虽然写在前面，不是从文件第一行开始依次执行的。
+
+```text
+main → 打开文件 → 读成字符串 → parse_sdp
+    parse_sdp → 遇到 a= 时调用 parse_attribute
+        rtpmap → parse_rtpmap
+        fmtp   → parse_fmtp
+    parse_sdp → 读完后检查 PT → 返回 Description
+main → 遍历媒体 → join_url → 打印
+```
+
+对第 9.1 节样例，用下表跟踪：
+
+| 读到哪里 | current 指向谁 | d.media 的变化 | 本次填写什么 |
+| --- | --- | --- | --- |
+| `s=Beginner Camera` | nullptr | 空 | d.name |
+| 会话级 `a=control:*` | nullptr | 空 | d.session_control |
+| 第一个 `m=video...96` | 第 0 条媒体 | 从 0 条变成 1 条 | video、端口、协议、PT 96 |
+| `a=rtpmap:96 H264/90000` | 第 0 条媒体 | 仍是 1 条 | formats[96] 的编码、时钟 |
+| 第二个 `m=audio...97` | 第 1 条媒体 | 从 1 条变成 2 条 | 新媒体和它自己的 formats[97] |
+| `a=fmtp:97 ...` | 第 1 条媒体 | 仍是 2 条 | formats[97].fmtp |
+
+几个 C++ 容易卡住的地方：
+
+- `current = &d.media.back()`：取刚加入列表的那条记录的位置。`current == nullptr` 表示还在会话区。`vector` 扩容可能让旧地址失效，因此这里每次 `push_back` 后都会重新取地址；不要在其他地方缓存旧指针。
+- `Format& f = m.formats[pt]`：不是复制一份数据，而是给 map 中的记录起一个局部名字，后面的修改会留在 map 里。这里已经检查 PT 属于当前媒体。
+- `has_pt` 查找失败就抛错：保证“参数必须填进本媒体已声明的格子”，避免误建一个没有在 `m=` 出现的 PT。
+- `to_int` 先检查是否全部为十进制数字，再转换；`96abc`、`-1` 和溢出都不能悄悄当成正常值。
+- `trim` 只用于 fmtp 的边界空白；原始 SDP 行的字段位置不会被随意移动。因此 `m =...`、行首带空格的 ` m=...` 都会报错。
+- `try/catch` 让错误集中在 `main` 打印并返回 1；正常的 warning 会保留结果并返回 0。
+- `channels=0` 在本例视频输出中表示“该字段不适用/未提供”，不是视频没有声音的判断。是否有声音应找独立的 audio 媒体。
+
+建议按这个顺序自己重写：只读文件 → 只识别 `m=` → 加 `control` → 加 `rtpmap` → 加 fmtp 原文 → 加关联检查 → 加 URL。每一步都用样例验证，不要刚开始就边学 Socket 边写全部播放器。
+
+### 10.4 输入边界与工程升级方向
+
+本示例为方便阅读一次读入整个文件，没有设置文件大小、行长、轨道数或属性数上限。接入设备前应增加这些可配置限制，并区分“格式非法”“合法但本实现不支持”“编码能力不足”。限制值取决于产品，不是 SDP 固定要求。
+
+另外应逐步加入：完整字段顺序与次数校验、`o/c/t` 的内部解析、UTF-8/BOM 策略、重复 fmtp 检测、完整静态 PT 表、编码特有校验、方向及连接信息继承、通用 URI 库和脱敏日志。不要把本例的“返回码 0”命名为“所有 SDP 校验通过”。
+
+未知属性保存进 `unknown_attributes`，同时加入 `warnings`；这是保留扩展信息的演示。方向属性目前只识别名字，已知但未展开的顶层字段给出 `field not interpreted` 警告，表示本实验没有使用它们。它们不是“服务器一定写错了”。
 
 ## 11. 运行方法：Windows 和 Linux 分开操作
 
@@ -1149,11 +1530,24 @@ media[1]: audio proto=RTP/AVP PTs=97
 MSVC 也可以：
 
 ```powershell
-cl /std:c++17 /EHsc /W4 /O2 sdp_inspect.cpp
+cl /nologo /std:c++17 /EHsc /W4 /utf-8 /O2 sdp_inspect.cpp /Fe:sdp_inspect.exe
 .\sdp_inspect.exe .\sample.sdp rtsp://127.0.0.1:8554/live/
 ```
 
 `cl` 命令要在“Developer PowerShell for VS”中执行。若输出中文乱码，先保证源文件 UTF-8；本实验的协议字段和日志主要是 ASCII。
+
+编译命令里 `-std=c++17` 选择语言版本；`-Wall -Wextra -pedantic` 打开有帮助的编译警告；`-O2` 开启优化；`-o` 后面是输出 EXE 名称。MSVC 的 `/EHsc` 启用标准 C++ 异常处理。它们是两套编译器的参数，不能混着写。
+
+正常输出还会原样打印两条 fmtp，并在标准错误流显示 `warning: line 4: field not interpreted: c`，因为本例没有展开连接字段。标准输出和标准错误是两个输出通道，显示顺序可能交错；这条 warning 不影响退出码 0。需要分开查看时：
+
+```powershell
+.\sdp_inspect.exe .\sample.sdp 'rtsp://127.0.0.1:8554/live/' 1> .\result.txt 2> .\warnings.txt
+$LASTEXITCODE
+Get-Content .\result.txt
+Get-Content .\warnings.txt
+```
+
+程序只计算地址，不会连接 `127.0.0.1:8554`。即使没有启动服务器，也应该得到相同输出。路径或 URL 有特殊字符时用引号包起来；本例仍会明确拒绝超出其子集的复杂 URL。
 
 ### 11.2 Linux Bash + g++
 
@@ -1190,6 +1584,68 @@ Linux 运行时注意大小写：`Sample.sdp` 和 `sample.sdp` 是两个文件�
 
 Windows PowerShell 查看退出码：`$LASTEXITCODE`。Linux Bash 查看退出码：`echo $?`。
 
+### 11.4 Windows 故障实验：每个错误都有核对目标
+
+**前置：**第 11.1 节正常样例已成功。先备份样例；下面用 PowerShell 建立独立文件，不会改动 `sample.sdp`。Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 可能写 BOM，因此这里使用 .NET 显式写 UTF-8 无 BOM；PowerShell 7 的默认行为有所不同。
+
+实验 A：把音频映射的 PT 改成未声明的 99。
+
+```powershell
+$originalSdp = [IO.File]::ReadAllText((Join-Path $PWD 'sample.sdp'))
+$utf8NoBom = [Text.UTF8Encoding]::new($false)
+$changedSdp = $originalSdp.Replace('a=rtpmap:97 ', 'a=rtpmap:99 ')
+[IO.File]::WriteAllText((Join-Path $PWD 'bad_pt.sdp'), $changedSdp, $utf8NoBom)
+.\sdp_inspect.exe .\bad_pt.sdp 'rtsp://cam/live/'
+$LASTEXITCODE
+```
+
+预期错误含 `rtpmap PT is not listed by m=`，退出码 1。若按第 9.1 节原样复制，错误行是 15；自行增删空行后行号会变化。
+
+实验 B：添加厂商扩展。继续在同一终端执行：
+
+```powershell
+$changedSdp = $originalSdp + "`r`na=x-vendor:test`r`n"
+[IO.File]::WriteAllText((Join-Path $PWD 'extension.sdp'), $changedSdp, $utf8NoBom)
+.\sdp_inspect.exe .\extension.sdp 'rtsp://cam/live/'
+$LASTEXITCODE
+```
+
+预期仍有两条媒体，退出码 0，新增 `ignored attribute a=x-vendor:test` 警告。因为属性加在最后，它属于音频段。PowerShell 的换行转义使用反引号；C++ 的换行转义使用反斜杠，两者不要混用。
+
+再独立完成以下变更，每项从原始样例复制一份：
+
+| 单项变更 | 预期结果 | 你要解释什么 |
+| --- | --- | --- |
+| 删除视频 `a=rtpmap:96...` | 退出 1，`dynamic PT 96 needs rtpmap` | 声明了动态号码，但没有告诉客户端含义 |
+| 改成 `H264/0` | 退出 1，`clock/channels must be positive` | 不能用 0 作时间刻度频率 |
+| 把视频端口改成 70000 | 退出 1，`port outside 0..65535` | 端口的有效范围 |
+| 追加 `x=vendor` | 退出 1，`unsupported top-level field` | 未知顶层字段不同于未知属性 |
+| 只删 `fmtp:96` | 仍能打印视频格式 | 解析成功不保证客户端已具备实际解码配置 |
+| 文件开头加 UTF-8 BOM | 本例在第 1 行拒绝 | 编码标记不是 SDP 的 `v` 字符 |
+| 基准参数从 `rtsp://cam/live/` 改成 `rtsp://cam/live` | SETUP 从 `/live/trackID=0` 变成 `/trackID=0` | 尾斜杠改变路径合并结果 |
+| 基准参数改成 `rtsp://cam/live/?token=demo` | 退出 1，`URL outside lab subset` | 合法 URI 也可能超出教学实现范围 |
+
+实验 C：单独建立下面这个完整文件 `pcmu.sdp`，确认没有 `rtpmap` 也能识别静态 PT 0。
+
+```sdp
+v=0
+o=- 2001 1 IN IP4 127.0.0.1
+s=PCMU Demo
+c=IN IP4 0.0.0.0
+t=0 0
+m=audio 0 RTP/AVP 0
+a=control:trackID=0
+```
+
+```powershell
+.\sdp_inspect.exe .\pcmu.sdp 'rtsp://cam/live/'
+$LASTEXITCODE
+```
+
+预期 `PT 0: PCMU clock=8000 channels=1`，没有会话聚合地址时打印 `<none>`，退出码 0。把 PT 0 改为 8 应输出 PCMA。再加 `a=rtpmap:0 H264/90000`，应拒绝静态映射冲突。
+
+**实验报告模板：**保存“改动的那一行、完整执行命令、预期输出、实际输出、退出码、我的解释”。仅写“运行成功”无法检查你是否理解了错误类型。
+
 ## 12. 连接真实 RTSP 流：把离线解析接到上一章
 
 ### 12.1 推荐接入顺序
@@ -1225,6 +1681,23 @@ media=audio pt=97 codec=MPEG4-GENERIC clock=48000 channels=2 control=trackID=1
 
 不要在日志里写入完整的 `rtsp://user:password@...`、鉴权响应、私有 token 或 `sprop` 之外的敏感内容。密码清理和重连策略见 [[30-runbooks/05-断线重连与故障排查|断线重连与故障排查]]。
 
+### 12.4 第一次接入真实设备，按这个小流程做
+
+**前置：**第 11 节离线实验完成，并且你已经能用播放器打开一条自己有权访问的 RTSP 流。没有摄像头时先停在离线实验，后续按 [[09-MediaMTX与实验环境]] 准备测试源；该环境章节仍有待完善，不能把里面的勾选项当作已配置成功。
+
+1. 用上一章客户端或抓包获得 DESCRIBE 的请求和完整响应；如果工具只打印到头部，先补齐读取 body 的逻辑。
+2. 在响应中标记状态码、Content-Type、Content-Length，以及基准地址的来源。
+3. 把完整的 body 单独另存为 UTF-8 无 BOM 的 `camera.sdp`；保留原始字段和值，不要凭经验“修正”PT 或参数。
+4. 将实际选定的绝对基准 URL 作为第二个参数，运行 `.\sdp_inspect.exe .\camera.sdp 'rtsp://设备地址/实际路径/'`。这里是命令形式，设备地址和路径必须换成真实值，尾斜杠必须来自实际基准，不能照抄。
+5. 用手工表和程序输出互相核对。出现 `URL outside lab subset` 或不支持的协议时，先记录输入类型，再补实现；不要删除 token 或修改协议名后冒充真实请求成功。
+6. 抓包核对实际 SETUP 请求地址与 Transport 响应。离线程序没有发送 SETUP，这一步必须由 RTSP 客户端完成。
+
+**选择轨道时不要机械选第一条。** 比如支持 H.264 的客户端遇到 H.265 视频、PCMU 音频，可以把视频标记为能力不足，只处理支持的音频；也可以按产品要求整体失败。策略由应用决定。只支持单个格式的接收器，在出现未选 PT 的 RTP 时应明确拒绝或丢弃，不能按选中编码硬解。
+
+常见流程中的 SETUP `Transport` 主要协商运输方式；不能认为在里面写一个 PT 就完成了任意编码切换。更换主/子码流或编码时，设备可能要求不同的 RTSP 路径或其他配置接口。
+
+学习者应留下：脱敏后的 SDP、基准 URL 的来源、轨道格式表、实际 SETUP 地址、实际 Transport。是否收到 RTP、是否能解码是之后的独立验收，不要提前勾选。
+
 ## 13. 常见错误：按层排查，不要盲目改代码
 
 | 现象 | 可能原因 | 第一检查项 | 修复方向 |
@@ -1239,6 +1712,10 @@ media=audio pt=97 codec=MPEG4-GENERIC clock=48000 channels=2 control=trackID=1
 | RTP 到达但解码器报参数不足 | H.264/H.265 参数集或 AAC config 缺失/损坏 | 检查 fmtp 和 RTP 首包 | 按对应 RFC 还原初始化数据 |
 | Linux 解析失败、Windows 正常 | CRLF、路径大小写或编码差异 | 查看行尾和实际路径 | 统一 UTF-8/换行，使用正确路径 |
 | 未知 `a=x-...` 直接失败 | 把厂商扩展当成未知顶层字段 | 查看行是否以 `a=` 开头 | 保留扩展并记录 warning |
+| 第一行明明是 `v=0` 却报错 | 文件有 BOM，或误复制了代码围栏 | 用编辑器查看编码，检查文件开头 | 保存 UTF-8 无 BOM，只保留代码块内内容 |
+| `<unresolved>` 或 `field not interpreted` | 示例没有实现该静态表项或字段 | 看清警告文字和实现范围 | 补模块或使用成熟库，不猜参数 |
+| `URL outside lab subset` | 合法但超出示例范围的查询串等 | 对照原始 URL，保留敏感字段脱敏 | 换完整 URI 库；不要随意删查询参数 |
+| 改了源码但输出始终不变 | 编译失败后运行了旧 EXE | 检查编译退出码和 EXE 修改时间 | 先解决编译问题，再执行新程序 |
 
 ### 13.1 看到“播放没画面”时的分层清单
 
@@ -1284,7 +1761,21 @@ Decoder：解码器是否支持 profile/level、分辨率和配置？
 14. H.264 `fmtp` 有 `sprop-parameter-sets`，仍然没有画面，下一层该查什么？
 15. 设计一个测试：证明程序不会把未知 `a=x-vendor` 当成致命错误。
 
-### 14.4 参考答案（先独立作答）
+### 14.4 进阶一点的手算与动手题
+
+16. `m=video ... 96 98` 配两个 rtpmap，是几条媒体、几种格式？
+17. 基准为 `rtsp://cam/a/live`，control 为 `trackID=2`，规范结果是什么？若基准末尾再加 `/` 呢？
+18. `H264/90000` 的视频稳定 25 fps，时间戳每幅图像约增加多少？每包是否都增加这个数？
+19. 48 kHz 音频每包 20 ms 和 10 ms，时间戳分别增加多少？
+20. `a=fmtp:96 sprop-parameter-sets=abc,def==` 应按怎样的层次拆？实际字符串若不是合法 Base64，谁负责报告？
+21. `config=1190` 应恢复成哪些字节？可以把十进制 1190 直接作为采样率吗？
+22. 缺省 `packetization-mode` 时，能直接按模式 1 解 FU-A 吗？
+23. Opus 的 `/48000/2` 是否证明每个包都是双声道声音？
+24. 编写两条不同媒体都使用 PT=96 的完整 SDP：video=H264/90000，audio=opus/48000/2。运行程序证明没有串用映射。
+25. 修改解析器，为每条媒体保存有效方向和连接信息。列出继承规则、测试输入与期望；这题作为选修，不要只加两个成员变量就算完成。
+
+### 14.5 参考答案（先独立作答）
+
 
 1. 不一定。设备可以按不同 URL、不同 SDP 或不同 profile 提供；不能假定一份描述必有音频。
 2. 0 是 RTSP 单播 SDP 中常见的“服务器不指定媒体接收端口”占位；96 是 PT，必须结合本媒体的 `rtpmap` 解读。
@@ -1301,6 +1792,18 @@ Decoder：解码器是否支持 profile/level、分辨率和配置？
 13. 文件名大小写、路径写法、行尾 CRLF、编译器版本、PATH、默认工作目录都可以检查。
 14. 检查 RTP 是否到达、FU-A 是否正确重组、参数集是否传给解码器、profile/level 和解码器能力。
 15. 在样例中添加 `a=x-vendor:test`；程序应正常打印媒体并给出 warning，而不是退出码 1。
+16. 一条媒体、两种格式。`m=` 的数量决定这里的媒体段数量。
+17. 分别是 `rtsp://cam/a/trackID=2`、`rtsp://cam/a/live/trackID=2`。
+18. 3600。同一幅图像可能拆成多个 RTP 包，它们可以有相同时间戳，所以不是每个包都加 3600。
+19. 960、480；随堂 PCMU/8000 的 20 ms 对应 160。
+20. 先识别 a 属性，再取 fmtp 名称和 PT，再按该编码参数规则拆 key/value，保留第一个等号后的完整值，最后按逗号拆两个 Base64 项。Base64 的有效性由参数处理模块检查；本示例只保留 fmtp 原文，不声明已经验证其内容。
+21. `11 90` 两个十六进制字节；不是十进制采样率。按本例 AAC-LC 规则可读出 48000 Hz、双声道。
+22. 不能，H.264 缺省模式为 0。能力判断和解包模式必须一致。
+23. 不能。它是 RFC 7587 要求的 SDP 表达，实际包可编码单声道声音。
+24. 应打印 video[0] 的 `PT 96: H264 clock=90000` 和 audio[1] 的 `PT 96: opus clock=48000 channels=2`。注意同时修改 audio 的 m/rtpmap/fmtp 引用，或去掉 AAC fmtp 并换成适用的 Opus 参数。
+25. 至少覆盖：会话级默认、媒体级覆盖、下一媒体恢复会话默认、两者均缺失时的规则。direction 缺省通常为 sendrecv；连接字段是否必需、是否可用须结合 SDP 和 RTSP 运输上下文，不能把 `0.0.0.0` 当作普通远端地址。媒体级 control 则不能直接继承会话 control 当 SETUP 地址。
+
+其他随堂练习：UTF-8 中文使字符数和字节数不同；视频媒体的 c 覆盖只影响该媒体，不影响另一条音频；fmtp 引用未声明 PT 应报关联错误；不能从 `H264/90000` 推出分辨率和帧率。
 
 ## 15. 阶段检查清单与最终验收
 
@@ -1324,25 +1827,41 @@ Decoder：解码器是否支持 profile/level、分辨率和配置？
 - [ ] 我能保留并解释 `fmtp` 的作用。
 - [ ] 我知道动态 PT 不能写死成某个编码。
 
-### 阶段 D：编码与 URL
+### 阶段 D：编码配置
 
 - [ ] 我能指出 H.264 的 SPS/PPS、H.265 的 VPS/SPS/PPS、AAC 的 config 可能出现在哪里。
+- [ ] 我能区分 Base64 与十六进制，说明转换后仍需要交给下一层。
+- [ ] 我知道 H.264 缺省打包模式和 Opus 固定 SDP 映射。
+
+### 阶段 E：控制地址
+
 - [ ] 我能算相对 control URL 的常见结果。
 - [ ] 我知道 `Content-Base`、`Content-Location`、请求 URL 的优先级。
 
-### 阶段 E：编码实验
+### 阶段 F：编码实验
 
-- [ ] 我在 Windows 或 Linux 编译运行了示例。
+- [ ] 我在 Windows 编译运行了 hello、逐行观察器和完整解析器。
 - [ ] 我看到了视频、音频、PT、clock 和 SETUP URL。
 - [ ] 我修改一个 PT 后，程序能给出带行号的错误。
 - [ ] 我加入未知 `a=x-vendor` 后，程序给出 warning 并继续运行。
+- [ ] 我完成动态 PT 缺映射、静态 PT 0、非法时钟和尾斜杠四个实验。
+- [ ] 我能说清退出码 0 的含义和本例没有验证的内容。
 
-### 阶段 F：连接真实流前
+### 阶段 G：接入与分层排错
 
 - [ ] 我知道本示例没有实现 Socket、认证、RTP、重组和解码。
 - [ ] 我能把解析器接在 DESCRIBE body 之后。
 - [ ] 我知道 PLAY 200 不等于已收到可解码的视频。
 - [ ] 我能按 RTSP、SDP、Transport、RTP、Codec、Decoder 分层排错。
+
+### 阶段 H：独立验收
+
+- [ ] 我在不看答案时完成第 14 节基础题和 URL 手算题。
+- [ ] 我能分析一份陌生 SDP，而不是只认样例中的 96/97。
+- [ ] 我能写出一个正常输入和三个失败输入，并解释退出码。
+- [ ] 我能指出哪些问题要留给 RTP、解包器、解码器或 RTSP 层解决。
+
+离线完成 F/H 后即可继续学 RTP；真实设备实验 G 可以等环境具备时补做。不能因为没有摄像头就无法继续基础课程，也不能把未做的真实流验收勾为已完成。
 
 ### 最终验收任务
 
@@ -1365,6 +1884,55 @@ PLAY 应该使用哪个控制地址？
 
 全部答对，再进入 [[05-RTP协议]]；如果 URL 或 fmtp 仍然不确定，先重做第 7 节和第 14 节练习。
 
+## 16. 术语速查、资料阅读顺序与作者验证
+
+### 16.1 忘记缩写时先查这里
+
+| 名称 | 展开或中文 | 本章记住一句话 |
+| --- | --- | --- |
+| SDP | Session Description Protocol，会话描述协议 | 用文本描述媒体，不装画面 |
+| RTSP | Real Time Streaming Protocol，实时流控制协议 | 发出描述、设置运输、播放等请求 |
+| RTP | Real-time Transport Protocol，实时传输协议 | 给媒体包标号、标格式和时间 |
+| RTCP | RTP Control Protocol，RTP 控制协议 | 统计传输、辅助同步等 |
+| PT | Payload Type，载荷类型编号 | 用本媒体的映射解释号码 |
+| AVP | Audio/Video Profile，音视频配置 | 约定 RTP 的一些使用规则和静态类型 |
+| fmtp | format parameters，格式参数 | 参数的具体语法由载荷格式定义 |
+| Hz | 赫兹，每秒的次数或刻度数 | RTP 时钟的 Hz 不等于视频 fps |
+| fps | frames per second，每秒帧数 | 画面一秒呈现多少帧 |
+| URI / URL | 资源标识符 / 资源地址 | 本章 URL 中主机、端口、路径各有含义 |
+| CRLF / LF | 回车加换行 / 单个换行 | 协议行结束和文件换行要分清 |
+| BOM | Byte Order Mark，字节序标记 | 本实验要求文件开头没有这个标记 |
+| NAL | Network Abstraction Layer，网络抽象层单元 | H.264/H.265 的一种压缩数据单元 |
+| SPS / PPS / VPS | 序列 / 图像 / 视频参数集 | 解码所需格式信息，不是实际图像本身 |
+| ASC | AudioSpecificConfig，音频特定配置 | 本章 AAC config 恢复出的初始化数据 |
+| 带内 / 带外 | 跟随媒体 / 通过另一条途径提供 | RTP 内参数集 / SDP 提供的参数集 |
+| 聚合控制 | 一次控制整个媒体组合 | 与对某条媒体的 SETUP 区分 |
+
+### 16.2 第一次读标准，不要从头背到尾
+
+1. 用 [RFC 8866 §5](https://www.rfc-editor.org/rfc/rfc8866.html#section-5) 核对字段、作用域和语法；它替代旧的 RFC 4566。先读 v/o/s/c/t/m/a 对应小节。
+2. 用 [RFC 2326 附录 C](https://www.rfc-editor.org/rfc/rfc2326.html#appendix-C) 核对 RTSP 1.0 里的 control、基准 URL、单播端口 0 和媒体描述。RTSP 2.0 则另读 RFC 7826，不能只替换请求行的版本数字。
+3. 用 [RFC 1808 §4](https://www.rfc-editor.org/rfc/rfc1808.html#section-4) 理解 RTSP 1.0 引用的相对地址规则，再查 [RFC 3986 §5](https://www.rfc-editor.org/rfc/rfc3986.html#section-5) 的通用引用解析算法。先掌握尾斜杠和根路径，完整 URI 实现交给成熟库。
+4. 用 RFC 3551 核对静态 PT；用 RFC 6184 §8.1、RFC 7798 §7、RFC 3640、RFC 7587 §7 分别查 H.264、H.265、MPEG4-GENERIC、Opus 参数。
+
+标准里的 MUST、SHOULD、MAY 大致分别表示必须、通常应当、允许。遇到新的参数时先确认是哪种编码、哪份规范，再判断是不是必需。网络文章或厂商别名可以帮助兼容，但不能悄悄替代标准规则。
+
+### 16.3 作者实际执行的验证（2026-10-20）
+
+本表是文档作者的验证记录，不表示读者已经完成阶段检查。
+
+| 验证项 | 实际结果 | 范围和限制 |
+| --- | --- | --- |
+| 代码来源 | 直接从本 Markdown 提取 hello、逐行观察器、完整解析器三个可独立运行的代码块 | 第 8.1 节结构草图不当作独立程序 |
+| Windows 编译 | MinGW-w64 g++ 15.2.0，C++17、`-Wall -Wextra -pedantic -O2` 编译全部成功，没有诊断输出 | MSVC 命令提供给读者，本次未执行 MSVC |
+| 正常输出 | hello 输出正确；观察器的媒体归属、行号正确；完整解析器列出 H.264/AAC 和正确 SETUP 地址 | 输出包含预期的未展开 c 字段警告 |
+| 解析和 URL 边界 | 49 组运行检查通过 | 包含 LF/CRLF、BOM、PT 关联与缺失、两媒体同 PT、静态 0/8、非法数值、缺字段、未知属性/字段、路径合并和主动拒绝复杂 URL 等 |
+| 文本结构 | 使用支持表格的 Markdown 解析器检查表格、列数、代码围栏及重复标题 | 不将源码结构检查当作已人工查看 Obsidian 当前界面 |
+| 协议核对 | 读取 RFC 2326/8866/7587/7798 官方正文，重点核对 URL 基准、单播端口 0、Opus 声道标记和 H265 名称 | 代码仍是有限教学实现，不表示标准全部覆盖 |
+| 真实网络与播放 | 本次只执行离线实验 | 未连接摄像头、未收取真实 RTP、未做解码或播放器画面验收；Linux 命令也未在本机执行 |
+
+临时源码、样例变体、可执行文件和核验脚本放在系统临时目录，未向知识库加入二进制文件。日期表示本次文档核验时间，不是 SDP 标准或服务器的版本号。
+
 ## Related
 
 - [[00-RTSP学习总纲]]
@@ -1384,6 +1952,8 @@ PLAY 应该使用哪个控制地址？
 - [RFC 8866：SDP](https://www.rfc-editor.org/rfc/rfc8866)
 - [RFC 2326：RTSP 1.0](https://www.rfc-editor.org/rfc/rfc2326)
 - [RFC 7826：RTSP 2.0](https://www.rfc-editor.org/rfc/rfc7826)
+- [RFC 1808：相对 URL](https://www.rfc-editor.org/rfc/rfc1808)
+- [RFC 3986：URI 通用语法](https://www.rfc-editor.org/rfc/rfc3986)
 - [RFC 3550：RTP/RTCP](https://www.rfc-editor.org/rfc/rfc3550)
 - [RFC 3551：RTP/AVP](https://www.rfc-editor.org/rfc/rfc3551)
 - [RFC 6184：H.264 over RTP](https://www.rfc-editor.org/rfc/rfc6184)
